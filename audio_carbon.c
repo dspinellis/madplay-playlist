@@ -94,7 +94,7 @@ void callback(SndChannelPtr channel, SndCommand *command)
 }
 
 static
-int wait(struct buffer *buffer)
+int buff_wait(struct buffer *buffer)
 {
   if (MPWaitOnSemaphore(buffer->semaphore, kDurationForever) != noErr) {
     audio_error = _("MPWaitOnSemaphore() failed");
@@ -263,7 +263,7 @@ int play(struct audio_play *play)
   /* wait for block to finish playing */
 
   if (buffer->pcm_nsamples == 0) {
-    if (wait(buffer) == -1)
+    if (buff_wait(buffer) == -1)
       return -1;
 
     buffer->pcm_length = 0;
