@@ -75,6 +75,7 @@ struct option const options[] = {
   { "help",		no_argument,		0,		 'h' },
   { "ignore-crc",	no_argument,		0,		 'i' },
   { "left",		no_argument,		0,		 '1' },
+  { "list",		required_argument,	0,		 '@' },
   { "license",		no_argument,		0,		-'l' },
   { "mono",		no_argument,		0,		 'm' },
   { "no-dither",	no_argument,		0,		 'd' },
@@ -110,6 +111,7 @@ struct option const options[] = {
 };
 
 char const *argv0;
+static char *file_list = NULL;
 
 # define EPUTS(str)	fputs(str, stream)
 
@@ -199,6 +201,7 @@ void show_usage(int verbose)
   EPUTS(_("  -z, --shuffle                randomize file list\n"));
   EPUTS(_("  -r, --repeat[=MAX]           "
 	  "play files MAX times, or indefinitely\n"));
+  EPUTS(_("  -@, --list=FILE              specify file list\n"));
 # if defined(USE_TTY)
   EPUTS(_("      --tty-control            enable keyboard controls\n"));
   EPUTS(_("      --no-tty-control         disable keyboard controls\n"));
@@ -504,7 +507,7 @@ void get_options(int argc, char *argv[], struct player *player)
 			    "g:x"
 # endif
 			    "12mS"		/* channel selection options */
-			    "s:t:zr::"		/* playback options */
+			    "s:t:zr:@::"	/* playback options */
 			    "TVh",		/* miscellaneous options */
 			    options, &index)) != -1) {
     switch (opt) {
@@ -639,6 +642,10 @@ void get_options(int argc, char *argv[], struct player *player)
 	player->options &= ~PLAYER_OPTION_TTYCONTROL;
       break;
 
+    case '@':
+      file_list = optarg;
+      break;
+
     case 'Q':
       player->verbosity = -2;
 
@@ -724,7 +731,7 @@ void get_options(int argc, char *argv[], struct player *player)
     }
   }
 
-  if (optind == argc) {
+  if (optind == argc && !file_list) {
     show_usage(0);
     exit(2);
   }
@@ -813,6 +820,28 @@ int main(int argc, char *argv[])
 
   /* run the player */
 
+  if (file_list) {
+	FILE *f;
+	char buff[1024];
+	int n;
+	char **list;
+
+	if ((f = fopen(file_list, "r")) == NULL)
+		return 5;
+	for (n = 0; fgets(buff, sizeof(buff), f);)
+		if (*buff != '#')
+			n++;
+	if ((list = (char **)malloc(n * sizeof(char *))) == NULL)
+		return 5;
+	rewind(f);
+	for (n = 0; fgets(buff, sizeof(buff), f);) {
+		*strrchr(buff, '\n') = '\0';
+		if (*buff != '#')
+			list[n++] = strdup(buff);
+	}
+	if (player_run(&player, n, (char const **)list) == -1)
+		return 4;
+  }
   if (player_run(&player, argc - optind, (char const **) &argv[optind]) == -1)
     result = 4;
 
