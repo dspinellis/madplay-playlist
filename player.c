@@ -52,6 +52,7 @@
 # include <time.h>
 # include <locale.h>
 # include <math.h>
+# include <signal.h>
 
 # ifdef HAVE_TERMIOS_H
 #  include <termios.h>
@@ -115,6 +116,29 @@ static int tty_fd = -1;
 static struct termios save_tty;
 static struct sigaction save_sigtstp, save_sigint;
 # endif
+
+static volatile enum {SIGNAL_CMD_NOP, SIGNAL_CMD_PREVIOUS, SIGNAL_CMD_NEXT} signal_command;
+
+/*
+ * NAME:	signal_filter()
+ * DESCRIPTION:	Allow asynchronous commands trhough signals
+ */
+enum mad_flow signal_filter(void *data, struct mad_frame *frame)
+{
+  return signal_command ? MAD_FLOW_STOP : MAD_FLOW_CONTINUE;
+}
+
+static void
+jmp_prev(void)
+{
+  signal_command = SIGNAL_CMD_PREVIOUS;
+}
+
+static void
+jmp_next(void)
+{
+  signal_command = SIGNAL_CMD_NEXT;
+}
 
 /*
  * NAME:	player_init()
@@ -195,6 +219,8 @@ void player_init(struct player *player)
   player->stats.audio.clipped_samples = 0;
   player->stats.audio.peak_clipping   = 0;
   player->stats.audio.peak_sample     = 0;
+  signal(SIGUSR1, jmp_prev);
+  signal(SIGUSR2, jmp_next);
 }
 
 /*
@@ -2052,6 +2078,16 @@ int play_all(struct player *player)
 	break;
       }
 
+      switch (signal_command) {
+      case SIGNAL_CMD_NEXT:
+        player->control = PLAYER_CONTROL_NEXT;
+	break;
+      case SIGNAL_CMD_PREVIOUS:
+        player->control = PLAYER_CONTROL_PREVIOUS;
+ 	break;
+      }
+      signal_command = SIGNAL_CMD_NOP;
+
       switch (player->control) {
       case PLAYER_CONTROL_DEFAULT:
 	if ((player->options & PLAYER_OPTION_SHUFFLE) && player->repeat &&
@@ -2419,6 +2455,9 @@ int setup_filters(struct player *player)
       addfilter(player, tty_filter, player) == -1)
     return -1;
 # endif
+
+  if (addfilter(player, signal_filter, player) == -1)
+    return -1;
 
   return 0;
 }
