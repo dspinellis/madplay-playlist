@@ -234,7 +234,11 @@ int config(struct audio_config *config)
     break;
 
   case 16:
+# if defined(WORDS_BIGENDIAN)
     audio_pcm = audio_pcm_s16be;
+# else
+    audio_pcm = audio_pcm_s16le;
+# endif
     break;
   }
 
